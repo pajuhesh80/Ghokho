@@ -27,14 +27,15 @@ def generate_hash_file(file_path: str) -> None:
 
 logging.info(f"Waiting for server at {domain}:{port} to accept connection...")
 
-with Client((domain, port)) as connection:
+with Client((domain, port)) as server:
+    server.send("worker")
     logging.info("Connected to server.")
 
     while True:
-        connection.send("waiting")
+        server.send("waiting")
 
         logging.info("Waiting for server message...")
-        message = connection.recv()
+        message = server.recv()
 
         logging.info("Message received from server.")
         if message == "terminate":
@@ -58,11 +59,11 @@ with Client((domain, port)) as connection:
                         "Invalid path type. Expected 'str', got '" + str(type(file_path).__name__) + "'.")
                     task_result.append("invalid type")
 
-            connection.send(task_result)
+            server.send(task_result)
             logging.info('Sent task results to server.')
         else:
-            connection.send("invalid message")
+            server.send("invalid message")
             logging.error('Message was invalid.')
 
-    connection.send("terminated")
+    server.send("terminated")
     logging.info("Terminating worker...")
