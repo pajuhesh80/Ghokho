@@ -2,6 +2,7 @@
 
 from multiprocessing.connection import Connection, Listener
 from pathlib import Path
+from subprocess import Popen, DEVNULL
 from threading import Thread, Lock, Condition
 import logging
 
@@ -13,11 +14,11 @@ logging.basicConfig(
     format="%(asctime)s: [%(name)s] [%(levelname)s] %(message)s"
 )
 
-main_logger = logging.getLogger(name="Server")
+main_logger = logging.getLogger("Server")
 
 workers = set()
 commanders = set()
-file_paths_queue = []
+file_paths_queue = set()
 
 workers_lock = Lock()
 commanders_lock = Lock()
@@ -26,7 +27,7 @@ file_paths_queue_cv = Condition()
 
 def file_enqueue(file_path: str) -> None:
     with file_paths_queue_cv:
-        file_paths_queue.insert(0, file_path)
+        file_paths_queue.add(file_path)
         file_paths_queue_cv.notify(1)
 
 
@@ -47,6 +48,15 @@ def file_dequeue(max_count: int) -> list[str]:
     return paths
 
 
+def start_and_keep_worker(id: int) -> None:
+    wt_logger = logging.getLogger(f"Worker keep-alive thread#{id}")
+    wt_logger.info("Thread started")
+    while True:
+        wt_logger.info("Starting new worker...")
+        Popen(args=["./worker.py"], stdout=DEVNULL, stderr=DEVNULL).wait()
+        wt_logger.warning("Worker terminated.")
+
+
 def add_worker(worker: Connection) -> None:
     workers_lock.acquire()
     workers.add(worker)
@@ -60,8 +70,7 @@ def remove_worker(worker: Connection) -> None:
 
 
 def worker_handler(worker: Connection, address: tuple[str, int]) -> None:
-    worker_logger = logging.getLogger(
-        name=f"Worker@{address[0]}:{address[1]}")
+    worker_logger = logging.getLogger(f"Worker@{address[0]}:{address[1]}")
     worker_logger.info("Worker thread started")
 
     while not worker.closed:
@@ -71,7 +80,8 @@ def worker_handler(worker: Connection, address: tuple[str, int]) -> None:
         paths = file_dequeue(5)
         worker.send(paths)
         sent_count = len(paths)
-        worker_logger.info(f"Sent {sent_count} paths to worker")
+        worker_logger.info(
+            f"Sent {sent_count} path{'s'[:sent_count ^ 1]} to worker: {paths}")
 
         results = worker.recv()
 
@@ -106,7 +116,7 @@ def remove_commander(commander: Connection) -> None:
 
 def commander_handler(commander: Connection, address: tuple[str, int]) -> None:
     commander_logger = logging.getLogger(
-        name=f"Commander@{address[0]}:{address[1]}")
+        f"Commander@{address[0]}:{address[1]}")
     commander_logger.info("Commander thread started")
 
     while not commander.closed:
@@ -136,6 +146,9 @@ with Listener((domain, port)) as listener:
     main_logger.info(
         "Server started. Accepting commander and worker connections...")
 
+    for i in range(5):
+        Thread(target=start_and_keep_worker, args=(i + 1, )).start()
+
     while True:
         client = listener.accept()
         addr = listener.last_accepted
@@ -143,14 +156,10 @@ with Listener((domain, port)) as listener:
         match(client.recv()):
             case "worker":
                 add_worker(client)
-                worker_thread = Thread(
-                    target=worker_handler, args=(client, addr))
-                worker_thread.start()
+                Thread(target=worker_handler, args=(client, addr)).start()
             case "commander":
                 add_commander(client)
-                commander_thread = Thread(
-                    target=commander_handler, args=(client, addr))
-                commander_thread.start()
+                Thread(target=commander_handler, args=(client, addr)).start()
             case other:
                 main_logger.warning(
                     f"Invalid client@{addr[0]}:{addr[1]}. Closing connection...")
