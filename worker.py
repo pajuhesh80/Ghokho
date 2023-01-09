@@ -37,7 +37,7 @@ with Client((domain, port)) as server:
         logging.info("Waiting for server message...")
         message = server.recv()
 
-        logging.info("Message received from server")
+        logging.info(f"Message received from server: '{message}'")
         if message == "terminate":
             break
         elif isinstance(message, list):
