@@ -40,7 +40,7 @@ with Client((domain, port)) as server:
         logging.info("Message received from server.")
         if message == "terminate":
             break
-        elif isinstance(message, tuple):
+        elif isinstance(message, list):
             task_result = []
 
             for file_path in message:
@@ -60,10 +60,10 @@ with Client((domain, port)) as server:
                     task_result.append("invalid type")
 
             server.send(task_result)
-            logging.info('Sent task results to server.')
+            logging.info("Sent task results to server.")
         else:
             server.send("invalid message")
-            logging.error('Message was invalid.')
+            logging.error("Message was invalid.")
 
     server.send("terminated")
     logging.info("Terminating worker...")

@@ -48,7 +48,7 @@ with Client((domain, port)) as server:
                 if file.is_file and file.suffix != '.md5':
                     files.append(str(file.absolute()))
 
-            server.send(tuple(files))
+            server.send(files)
             logging.info('Sent list of file paths to the server.')
         else:
             server.send("invalid message")
