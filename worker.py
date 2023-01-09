@@ -29,7 +29,7 @@ logging.info(f"Waiting for server at {domain}:{port} to accept connection...")
 
 with Client((domain, port)) as server:
     server.send("worker")
-    logging.info("Connected to server.")
+    logging.info("Connected to server")
 
     while True:
         server.send("waiting")
@@ -37,7 +37,7 @@ with Client((domain, port)) as server:
         logging.info("Waiting for server message...")
         message = server.recv()
 
-        logging.info("Message received from server.")
+        logging.info("Message received from server")
         if message == "terminate":
             break
         elif isinstance(message, list):
@@ -46,24 +46,24 @@ with Client((domain, port)) as server:
             for file_path in message:
                 try:
                     file_path = path.abspath(file_path)
-                    logging.info("Calculating MD5 hash for file: " + file_path)
+                    logging.info(
+                        f"Calculating MD5 hash for file: '{file_path}'")
                     generate_hash_file(file_path)
-                    logging.info("MD5 hash file created: " +
-                                 file_path + ".md5")
+                    logging.info(f"MD5 hash file created: '{file_path}.md5'")
                     task_result.append("done")
                 except FileNotFoundError:
-                    logging.error("Invalid file path: " + file_path)
+                    logging.error(f"Invalid file path: '{file_path}'")
                     task_result.append("not found")
                 except TypeError:
                     logging.error(
-                        "Invalid path type. Expected 'str', got '" + str(type(file_path).__name__) + "'.")
+                        f"Invalid path type. Expected 'str', got '{type(file_path).__name__}'")
                     task_result.append("invalid type")
 
             server.send(task_result)
-            logging.info("Sent task results to server.")
+            logging.info("Sent task results to server")
         else:
             server.send("invalid message")
-            logging.error("Message was invalid.")
+            logging.error("Message was invalid")
 
     server.send("terminated")
     logging.info("Terminating worker...")

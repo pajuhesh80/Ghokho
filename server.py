@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 from multiprocessing.connection import Connection, Listener
+from pathlib import Path
 from threading import Thread, Lock
 import logging
 
@@ -12,7 +13,7 @@ logging.basicConfig(
     format="%(asctime)s: [%(name)s] [%(levelname)s] %(message)s"
 )
 
-main_logger = logging.Logger(name="Server")
+main_logger = logging.getLogger(name="Server")
 
 workers = set()
 commanders = set()
@@ -20,6 +21,11 @@ file_paths_queue = []
 
 file_paths_queue_lock = Lock()
 rm_worker_lock = Lock()
+
+paths = Path("test_data").rglob('*')
+for file in paths:
+    if file.is_file and file.suffix != '.md5':
+        file_paths_queue.append(str(file.absolute()))
 
 
 def file_enqueue(file_path: str) -> None:
@@ -65,8 +71,10 @@ def remove_worker(worker: Connection) -> None:
     rm_worker_lock.release()
 
 
-def worker_handler(worker: Connection, id: int) -> None:
-    worker_logger = logging.Logger(name=f"Worker#{id}")
+def worker_handler(worker: Connection, address: tuple[str, int]) -> None:
+    worker_logger = logging.getLogger(
+        name=f"Worker@{address[0]}:{address[1]}")
+    worker_logger.info("Worker thread started")
 
     while not worker.closed:
         while worker.recv() != "waiting":
@@ -75,7 +83,7 @@ def worker_handler(worker: Connection, id: int) -> None:
         paths = file_dequeue(5)
         worker.send(paths)
         sent_count = len(paths)
-        worker_logger.info(f"Sent {sent_count} paths to worker.")
+        worker_logger.info(f"Sent {sent_count} paths to worker")
 
         results = worker.recv()
 
@@ -90,10 +98,10 @@ def worker_handler(worker: Connection, id: int) -> None:
                     worker_logger.info(f"Hash file created for '{paths[i]}'")
                 else:
                     worker_logger.warning(
-                        f"Worker did not create hash file for '{paths[i]}' and returned this error: {results[i]}")
+                        f"Worker did not create hash file for '{paths[i]}' and returned this error: '{results[i]}'")
 
     remove_worker(worker)
-    worker_logger.info("Worker disconnected.")
+    worker_logger.info("Worker disconnected")
 
 
 main_logger.info(f"Starting server at {domain}:{port}...")
@@ -101,16 +109,13 @@ main_logger.info(f"Starting server at {domain}:{port}...")
 with Listener((domain, port)) as listener:
     main_logger.info(
         "Server started. Accepting commander and worker connections...")
-    worker_id = 0
 
-    try:
-        while True:
-            client = listener.accept()
-            if client.recv() == 'worker':
-                workers.add(client)
-                worker_thread = Thread(
-                    target=worker_handler, args=(client, worker_id))
-                worker_id += 1
-                worker_thread.start()
-    except KeyboardInterrupt:
-        main_logger.info("Shutting down the server...")
+    while True:
+        client = listener.accept()
+        addr = listener.last_accepted
+        main_logger.info(f"New connection from {addr[0]}:{addr[1]}")
+        if client.recv() == 'worker':
+            workers.add(client)
+            worker_thread = Thread(
+                target=worker_handler, args=(client, addr))
+            worker_thread.start()
