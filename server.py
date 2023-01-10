@@ -93,6 +93,7 @@ def worker_handler(worker: Connection, address: tuple[str, int]) -> None:
     worker_logger = logging.getLogger(f"Worker@{address[0]}:{address[1]}")
     worker_logger.info("Worker thread started")
     penalties[worker] = 0
+    paths = []
 
     try:
         with worker:
@@ -126,8 +127,13 @@ def worker_handler(worker: Connection, address: tuple[str, int]) -> None:
                             worker_logger.warning(
                                 f"Worker did not create hash file for '{paths[i]}' and returned this error: '{results[i]}'"
                             )
+                    paths.clear()
     except (EOFError, OSError):
         worker_logger.error("Lost connection to worker")
+    finally:
+        # Some files were going to be processed but worker has been terminated. Recover them.
+        for path in paths:
+            file_enqueue(path)
 
     # Wait if remove_worker is running
     workers_lock.acquire()
