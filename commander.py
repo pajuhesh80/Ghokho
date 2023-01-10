@@ -58,6 +58,7 @@ def checksum_checker(id: int) -> None:
     while True:
         file_path = file_dequeue(check_files_queue, check_files_queue_cv)
         if file_path in send_files_queue:
+            # File is checked before and waiting to be sent to server.
             file_enqueue(check_files_queue, check_files_queue_cv, file_path)
             continue
         if os.path.exists(file_path + ".md5"):
@@ -74,6 +75,7 @@ def checksum_checker(id: int) -> None:
                 checker_logger.warning(
                     f"Incorrect hash for file '{file_path}'. Expected: '{hash_hex}', Actual: '{hash_file_content}'"
                 )
+                file_enqueue(send_files_queue, send_files_queue_cv, "ERR " + file_path)
             else:
                 checker_logger.info(f"Hash file matched for '{file_path}'")
                 continue

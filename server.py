@@ -18,9 +18,12 @@ logging.basicConfig(
 
 main_logger = logging.getLogger("Server")
 
-workers = set()
+worker_pid: dict[Connection, int] = {}
+worker_proc: list[Popen] = []
 commanders = set()
 file_paths_queue = set()
+last_hashed_by: dict[str, Connection] = {}
+penalties: dict[Connection, int] = {}
 
 workers_lock = Lock()
 commanders_lock = Lock()
@@ -50,30 +53,46 @@ def file_dequeue(max_count: int) -> list[str]:
     return paths
 
 
+def add_worker_proc(process: Popen) -> None:
+    workers_lock.acquire()
+    worker_proc.append(process)
+    workers_lock.release()
+
+
 def start_and_keep_worker(id: int) -> None:
     wt_logger = logging.getLogger(f"Worker keep-alive thread#{id}")
     wt_logger.info("Thread started")
     while True:
         wt_logger.info("Starting new worker...")
-        Popen(args=["./worker.py"], stdout=DEVNULL, stderr=DEVNULL).wait()
+        proc = Popen(args=["./worker.py"], stdout=DEVNULL, stderr=DEVNULL)
+        add_worker_proc(proc)
+        proc.wait()
         wt_logger.warning("Worker terminated")
 
 
-def add_worker(worker: Connection) -> None:
+def add_worker(worker: Connection, pid: int) -> None:
     workers_lock.acquire()
-    workers.add(worker)
+    worker_pid[worker] = pid
     workers_lock.release()
 
 
 def remove_worker(worker: Connection) -> None:
     workers_lock.acquire()
-    workers.remove(worker)
+    pid = worker_pid[worker]
+    worker.close()
+    for proc in worker_proc:
+        if proc.pid == pid:
+            proc.kill()
+            break
+    worker_pid.pop(worker)
+    penalties.pop(worker)
     workers_lock.release()
 
 
 def worker_handler(worker: Connection, address: tuple[str, int]) -> None:
     worker_logger = logging.getLogger(f"Worker@{address[0]}:{address[1]}")
     worker_logger.info("Worker thread started")
+    penalties[worker] = 0
 
     try:
         with worker:
@@ -102,14 +121,23 @@ def worker_handler(worker: Connection, address: tuple[str, int]) -> None:
                             worker_logger.info(
                                 f"Hash file created for '{paths[i]}'"
                             )
+                            last_hashed_by[paths[i]] = worker
                         else:
                             worker_logger.warning(
                                 f"Worker did not create hash file for '{paths[i]}' and returned this error: '{results[i]}'"
                             )
-    except EOFError:
+    except (EOFError, OSError):
         worker_logger.error("Lost connection to worker")
 
-    remove_worker(worker)
+    # Wait if remove_worker is running
+    workers_lock.acquire()
+
+    if worker in worker_pid:
+        workers_lock.release()
+        # Worked terminated by itself. Cleanup...
+        remove_worker(worker)
+    else:
+        workers_lock.release()
     worker_logger.info("Worker disconnected")
 
 
@@ -141,17 +169,31 @@ def commander_handler(commander: Connection, address: tuple[str, int]) -> None:
                     "Requested commander to send list of file paths"
                 )
 
-                result = commander.recv()
+                result:str = commander.recv()
                 if result == "invalid message":
                     commander_logger.error(
                         "Commander reported invalid message. Terminating Commander..."
                     )
                     commander.send('terminate')
                     break
+                elif result.startswith("ERR "):
+                    file_path = result[4:]
+                    commander_logger.warning(f"Reported bad hash for '{file_path}'")
+
+                    bad_worker = last_hashed_by[file_path]
+                    if bad_worker in penalties:
+                        penalties[bad_worker] += 1
+
+                        if penalties[bad_worker] > 2:
+                            pid = worker_pid[bad_worker]
+                            commander_logger.warning(
+                                f"Worker with pid '{pid}' exceeded allowed number of penalties. Terminating it..."
+                            )
+                            remove_worker(bad_worker)
                 else:
                     file_enqueue(result)
                     commander_logger.info(f"Added '{result}' to files queue")
-    except EOFError:
+    except (EOFError, OSError):
         commander_logger.error("Lost connection to commander")
 
     remove_commander(commander)
@@ -174,7 +216,8 @@ with Listener((domain, port)) as listener:
         main_logger.info(f"New connection from {addr[0]}:{addr[1]}")
         match(client.recv()):
             case "worker":
-                add_worker(client)
+                pid = client.recv()
+                add_worker(client, pid)
                 Thread(target=worker_handler, args=(client, addr)).start()
             case "commander":
                 add_commander(client)

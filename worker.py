@@ -4,7 +4,7 @@ import hashlib
 import logging
 
 from multiprocessing.connection import Client
-from os import path
+from os import getpid, path
 import random
 
 
@@ -25,7 +25,7 @@ def generate_hash_file(file_path: str) -> None:
             hash.update(chunk)
 
     with open(file_path + ".md5", "w") as hash_file:
-        content = '' if random.random() < 0.33 else hash.hexdigest()
+        content = '' if random.random() < 0.5 else hash.hexdigest()
         hash_file.write(content)
 
 
@@ -33,6 +33,7 @@ logging.info(f"Waiting for server at {domain}:{port} to accept connection...")
 
 with Client((domain, port)) as server:
     server.send("worker")
+    server.send(getpid())
     logging.info("Connected to server")
 
     while True:
