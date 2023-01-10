@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 
+import logging
+
 from multiprocessing.connection import Connection, Listener
 from pathlib import Path
 from subprocess import Popen, DEVNULL
 from threading import Thread, Lock, Condition
-import logging
+
 
 domain = '127.0.0.1'
 port = 8081

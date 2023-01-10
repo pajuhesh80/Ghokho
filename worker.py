@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 
 import hashlib
-from multiprocessing.connection import Client
 import logging
+
+from multiprocessing.connection import Client
 from os import path
+import random
+
 
 domain = "127.0.0.1"
 port = 8081
@@ -22,7 +25,8 @@ def generate_hash_file(file_path: str) -> None:
             hash.update(chunk)
 
     with open(file_path + ".md5", "w") as hash_file:
-        hash_file.write(hash.hexdigest())
+        content = '' if random.random() < 0.33 else hash.hexdigest()
+        hash_file.write(content)
 
 
 logging.info(f"Waiting for server at {domain}:{port} to accept connection...")
