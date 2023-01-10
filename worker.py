@@ -47,7 +47,8 @@ with Client((domain, port)) as server:
                 try:
                     file_path = path.abspath(file_path)
                     logging.info(
-                        f"Calculating MD5 hash for file: '{file_path}'")
+                        f"Calculating MD5 hash for file: '{file_path}'"
+                    )
                     generate_hash_file(file_path)
                     logging.info(f"MD5 hash file created: '{file_path}.md5'")
                     task_result.append("done")
@@ -56,7 +57,8 @@ with Client((domain, port)) as server:
                     task_result.append("not found")
                 except TypeError:
                     logging.error(
-                        f"Invalid path type. Expected 'str', got '{type(file_path).__name__}'")
+                        f"Invalid path type. Expected 'str', got '{type(file_path).__name__}'"
+                    )
                     task_result.append("invalid type")
 
             server.send(task_result)

@@ -22,17 +22,6 @@ logging.basicConfig(
 )
 
 
-def generate_hash_file(file_path: str) -> None:
-    hash = hashlib.md5()
-
-    with open(file_path, "rb") as file:
-        while chunk := file.read(4096):
-            hash.update(chunk)
-
-    with open(file_path + ".md5", "w") as hash_file:
-        hash_file.write(hash.hexdigest())
-
-
 logging.info(f"Waiting for server at {domain}:{port} to accept connection...")
 
 with Client((domain, port)) as server:

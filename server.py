@@ -54,7 +54,7 @@ def start_and_keep_worker(id: int) -> None:
     while True:
         wt_logger.info("Starting new worker...")
         Popen(args=["./worker.py"], stdout=DEVNULL, stderr=DEVNULL).wait()
-        wt_logger.warning("Worker terminated.")
+        wt_logger.warning("Worker terminated")
 
 
 def add_worker(worker: Connection) -> None:
@@ -73,30 +73,39 @@ def worker_handler(worker: Connection, address: tuple[str, int]) -> None:
     worker_logger = logging.getLogger(f"Worker@{address[0]}:{address[1]}")
     worker_logger.info("Worker thread started")
 
-    while not worker.closed:
-        while worker.recv() != "waiting":
-            pass
+    try:
+        with worker:
+            while True:
+                while worker.recv() != "waiting":
+                    pass
 
-        paths = file_dequeue(5)
-        worker.send(paths)
-        sent_count = len(paths)
-        worker_logger.info(
-            f"Sent {sent_count} path{'s'[:sent_count ^ 1]} to worker: {paths}")
+                paths = file_dequeue(5)
+                worker.send(paths)
+                sent_count = len(paths)
+                worker_logger.info(
+                    f"Sent {sent_count} path{'s'[:sent_count ^ 1]} to worker: {paths}"
+                )
 
-        results = worker.recv()
+                results = worker.recv()
 
-        if results == "invalid message":
-            worker_logger.error(
-                "Worker reported invalid message. Terminating worker...")
-            worker.send('terminate')
-            worker.close()
-        else:
-            for i in range(sent_count):
-                if results[i] == "done":
-                    worker_logger.info(f"Hash file created for '{paths[i]}'")
+                if results == "invalid message":
+                    worker_logger.error(
+                        "Worker reported invalid message. Terminating worker..."
+                    )
+                    worker.send('terminate')
+                    break
                 else:
-                    worker_logger.warning(
-                        f"Worker did not create hash file for '{paths[i]}' and returned this error: '{results[i]}'")
+                    for i in range(sent_count):
+                        if results[i] == "done":
+                            worker_logger.info(
+                                f"Hash file created for '{paths[i]}'"
+                            )
+                        else:
+                            worker_logger.warning(
+                                f"Worker did not create hash file for '{paths[i]}' and returned this error: '{results[i]}'"
+                            )
+    except EOFError:
+        worker_logger.error("Lost connection to worker")
 
     remove_worker(worker)
     worker_logger.info("Worker disconnected")
@@ -119,22 +128,29 @@ def commander_handler(commander: Connection, address: tuple[str, int]) -> None:
         f"Commander@{address[0]}:{address[1]}")
     commander_logger.info("Commander thread started")
 
-    while not commander.closed:
-        while commander.recv() != "waiting":
-            pass
+    try:
+        with commander:
+            while True:
+                while commander.recv() != "waiting":
+                    pass
 
-        commander.send("get path")
-        commander_logger.info("Requested commander to send list of file paths")
+                commander.send("get path")
+                commander_logger.info(
+                    "Requested commander to send list of file paths"
+                )
 
-        result = commander.recv()
-        if result == "invalid message":
-            commander_logger.error(
-                "Commander reported invalid message. Terminating Commander...")
-            commander.send('terminate')
-            commander.close()
-        else:
-            file_enqueue(result)
-            commander_logger.info(f"Added '{result}' to files queue")
+                result = commander.recv()
+                if result == "invalid message":
+                    commander_logger.error(
+                        "Commander reported invalid message. Terminating Commander..."
+                    )
+                    commander.send('terminate')
+                    break
+                else:
+                    file_enqueue(result)
+                    commander_logger.info(f"Added '{result}' to files queue")
+    except EOFError:
+        commander_logger.error("Lost connection to commander")
 
     remove_commander(commander)
     commander_logger.info("Commander disconnected")
@@ -144,7 +160,8 @@ main_logger.info(f"Starting server at {domain}:{port}...")
 
 with Listener((domain, port)) as listener:
     main_logger.info(
-        "Server started. Accepting commander and worker connections...")
+        "Server started. Accepting commander and worker connections..."
+    )
 
     for i in range(5):
         Thread(target=start_and_keep_worker, args=(i + 1, )).start()
@@ -162,5 +179,6 @@ with Listener((domain, port)) as listener:
                 Thread(target=commander_handler, args=(client, addr)).start()
             case other:
                 main_logger.warning(
-                    f"Invalid client@{addr[0]}:{addr[1]}. Closing connection...")
+                    f"Invalid client@{addr[0]}:{addr[1]}. Closing connection..."
+                )
                 client.close()
