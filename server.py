@@ -175,7 +175,7 @@ def commander_handler(commander: Connection, address: tuple[str, int]) -> None:
                     "Requested commander to send list of file paths"
                 )
 
-                result:str = commander.recv()
+                result: str = commander.recv()
                 if result == "invalid message":
                     commander_logger.error(
                         "Commander reported invalid message. Terminating Commander..."
@@ -184,7 +184,9 @@ def commander_handler(commander: Connection, address: tuple[str, int]) -> None:
                     break
                 elif result.startswith("ERR "):
                     file_path = result[4:]
-                    commander_logger.warning(f"Reported bad hash for '{file_path}'")
+                    commander_logger.warning(
+                        f"Reported bad hash for '{file_path}'"
+                    )
 
                     bad_worker = last_hashed_by[file_path]
                     if bad_worker in penalties:

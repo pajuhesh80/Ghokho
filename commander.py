@@ -83,6 +83,7 @@ def checksum_checker(id: int) -> None:
             checker_logger.info(f"Hash file does not exist for '{file_path}'")
         # Hash file does not exist or curropted. Send to server to (re)calculate hash.
         file_enqueue(send_files_queue, send_files_queue_cv, file_path)
+        sleep(0.25)
         file_enqueue(check_files_queue, check_files_queue_cv, file_path)
         
 
