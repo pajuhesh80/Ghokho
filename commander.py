@@ -40,14 +40,20 @@ def file_dequeue(queue: set, queue_cv: Condition) -> str:
         return queue.pop()
 
 
-def fs_crawler(root: str) -> None:
-    fs_logger = logging.getLogger("Crawler")
-    fs_logger.info("File System Crawler started")
+def scan_fs_recursive(root: str, logger: logging.Logger) -> None:
     with os.scandir(root) as iter:
         for entry in iter:
             if entry.is_file() and not entry.name.endswith(".md5"):
                 file_enqueue(check_files_queue, check_files_queue_cv, entry.path)
-                fs_logger.info(f"Added '{entry.path}' to files queue")
+                logger.info(f"Added '{entry.path}' to files queue")
+            elif entry.is_dir():
+                scan_fs_recursive(entry.path, logger)
+
+
+def fs_crawler(root: str) -> None:
+    fs_logger = logging.getLogger("Crawler")
+    fs_logger.info("File System Crawler started")
+    scan_fs_recursive(root, fs_logger)
     fs_logger.info("Finished listing files")
 
 

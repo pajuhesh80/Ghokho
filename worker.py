@@ -25,7 +25,9 @@ def generate_hash_file(file_path: str) -> None:
             hash.update(chunk)
 
     with open(file_path + ".md5", "w") as hash_file:
-        content = '' if random.random() < 0.5 else hash.hexdigest()
+        content = hash.hexdigest()
+        if random.random() < 0.5:
+            content = 'CORRUPTED!!!'
         hash_file.write(content)
 
 
